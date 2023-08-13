@@ -10,12 +10,14 @@ use std::path::Path;
 use std::process::Command;
 use std::time::SystemTime;
 
-struct InfluxCredentials {
+struct BorgFluxEnv {
     url: String,
     token: String,
     org: String,
     bucket: String,
     host: String,
+    repository: String,
+    source_path: String,
 }
 
 struct InfluxTag {
@@ -67,13 +69,12 @@ fn main() {
 
     send_frame_point(&credentials, "backup_start".to_string());
 
-    run_borg_backup();
+    let json_output = run_borg_backup(&credentials.repository, &credentials.source_path);
 
-    let json_file_path = Path::new("./stats.json");
-    let json_value = read_borg_json_file(json_file_path);
+    let json_value = read_borg_json_output(json_output);
 
     if json_value.is_err() {
-        panic!("Couldn't read the JSON fiel correctly!");
+        panic!("Couldn't read the JSON file correctly!");
     }
 
     let backup_stats = extract_data_from_json(json_value.unwrap(), credentials.host.to_owned());
@@ -86,23 +87,22 @@ fn main() {
     send_frame_point(&credentials, "backup_end".to_string());
 }
 
-fn read_env_file() -> InfluxCredentials {
+fn read_env_file() -> BorgFluxEnv {
     dotenv().ok();
 
-    InfluxCredentials {
+    BorgFluxEnv {
         url: env::var("INFLUX_URL").expect("INFLUX_URL missing"),
         token: env::var("INFLUX_TOKEN").expect("INFLUX_TOKEN missing"),
         org: env::var("INFLUX_ORG").expect("INFLUX_ORG missing"),
         bucket: env::var("INFLUX_BUCKET").expect("INFLUX_BUCKET missing"),
         host: env::var("HOST").expect("HOST missing"),
+        repository: env::var("BORG_REPOSITORY").expect("BORG_REPOSITORY missing"),
+        source_path: env::var("BORG_SOURCE_PATH").expect("BORG_SOURCE_PATH missing"),
     }
 }
 
-fn read_borg_json_file(file_path: &Path) -> Result<Value, Box<dyn Error>> {
-    let json_file = File::open(file_path)?;
-    let file_reader = BufReader::new(json_file);
-
-    let json_value: Value = serde_json::from_reader(file_reader)?;
+fn read_borg_json_output(json_output: String) -> Result<Value, Box<dyn Error>> {
+    let json_value: Value = serde_json::from_str(&json_output)?;
 
     return Ok(json_value);
 }
@@ -117,7 +117,7 @@ fn extract_data_from_json(json_data: Value, host: String) -> Backup {
         compressed_size: json_data["archive"]["stats"]["compressed_size"]
             .as_i64()
             .unwrap(),
-        deduplicated_size: json_data["archive"]["deduplicated_size"].as_i64().unwrap(),
+        deduplicated_size: json_data["archive"]["stats"]["deduplicated_size"].as_i64().unwrap(),
         number_of_files: json_data["archive"]["stats"]["nfiles"].as_i64().unwrap(),
         original_size: json_data["archive"]["stats"]["original_size"]
             .as_i64()
@@ -174,7 +174,7 @@ fn create_influx_point_from_backup(backup: Backup) -> InfluxPoint {
     }
 }
 
-fn send_frame_point(credentials: &InfluxCredentials, measurement: String) {
+fn send_frame_point(credentials: &BorgFluxEnv, measurement: String) {
     let tags: Vec<InfluxTag> = vec![InfluxTag {
         name: "host".to_string(),
         value: credentials.host.to_owned(),
@@ -221,13 +221,14 @@ fn build_raw_data_from_point(point: InfluxPoint) -> String {
     format!("{} {}", raw_data, timestamp)
 }
 
-fn write_to_influx(point: InfluxPoint, credentials: &InfluxCredentials) {
+fn write_to_influx(point: InfluxPoint, credentials: &BorgFluxEnv) {
     let client = reqwest::blocking::Client::new();
     let body = build_raw_data_from_point(point);
     let api_url = format!(
-        "{}/api/v2/write?bucket={}/rp&precision=s",
+        "{}/api/v2/write?bucket={}&org={}&precision=s",
         credentials.url.to_owned(),
-        credentials.bucket.to_owned()
+        credentials.bucket.to_owned(),
+        credentials.org.to_owned()
     );
 
     let result = client
@@ -244,20 +245,29 @@ fn write_to_influx(point: InfluxPoint, credentials: &InfluxCredentials) {
     }
 }
 
-fn run_borg_backup() {
+fn run_borg_backup(repository: &String, source_path: &String) -> String {
     let is_borg_installed = Command::new("which").arg("borg").status();
 
     if is_borg_installed.is_err() || !is_borg_installed.unwrap().success() {
         panic!("BorgBackup is not installed!");
     }
 
-    // TODO: add repository and origin path
-    Command::new("borg")
+    let timestamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        .to_string();
+
+    let backup_repo = format!("{}::{}", repository.to_owned(), timestamp);
+
+    let output = Command::new("borg")
         .arg("create")
         .arg("-v")
-        .arg("json")
-        .arg("REPO")
-        .arg("ORIGIN_PATH")
+        .arg("--json")
+        .arg(backup_repo)
+        .arg(source_path)
         .output()
         .expect("Something went wrong while running the backup!");
+
+    String::from_utf8_lossy(&output.stdout).to_string()
 }
