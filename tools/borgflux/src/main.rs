@@ -6,6 +6,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use std::process::Command;
 use std::time::SystemTime;
 
 struct InfluxCredentials {
@@ -60,7 +61,29 @@ struct InfluxPoint {
     fields: Vec<InfluxField>,
 }
 
-fn main() {}
+fn main() {
+    let credentials = read_env_file();
+
+    send_frame_point(&credentials, "backup_start".to_string());
+
+    run_borg_backup();
+
+    let json_file_path = Path::new("./stats.json");
+    let json_value = read_borg_json_file(json_file_path);
+
+    if json_value.is_err() {
+        panic!("Couldn't read the JSON fiel correctly!");
+    }
+
+    let backup_stats = extract_data_from_json(json_value.unwrap(), credentials.host.to_owned());
+    let influx_backup_point = create_influx_point_from_backup(backup_stats);
+
+    write_to_influx(influx_backup_point, &credentials);
+
+    // TODO: write backup Influx point
+
+    send_frame_point(&credentials, "backup_end".to_string());
+}
 
 fn read_env_file() -> InfluxCredentials {
     dotenv().ok();
@@ -85,7 +108,7 @@ fn read_borg_json_file(file_path: &Path) -> Result<Value, Box<dyn Error>> {
 
 fn extract_data_from_json(json_data: Value, host: String) -> Backup {
     Backup {
-        host: host,
+        host,
         backup_name: json_data["archive"]["name"].to_string(),
         encryption: json_data["encryption"]["mode"].to_string(),
         repo_location: json_data["repository"]["location"].to_string(),
@@ -144,10 +167,27 @@ fn create_influx_point_from_backup(backup: Backup) -> InfluxPoint {
     ];
 
     InfluxPoint {
-        measurement: "backup".to_string(),
-        tags: tags,
-        fields: fields,
+        measurement: "backup_data".to_string(),
+        tags,
+        fields,
     }
+}
+
+fn send_frame_point(credentials: &InfluxCredentials, measurement: String) {
+    let tags: Vec<InfluxTag> = vec![InfluxTag {
+        name: "host".to_string(),
+        value: credentials.host.to_owned(),
+    }];
+
+    let fields: Vec<InfluxField> = vec![];
+
+    let point = InfluxPoint {
+        measurement,
+        tags,
+        fields,
+    };
+
+    write_to_influx(point, credentials);
 }
 
 fn build_raw_data_from_point(point: InfluxPoint) -> String {
@@ -169,7 +209,27 @@ fn build_raw_data_from_point(point: InfluxPoint) -> String {
     format!("{} {}", raw_data, timestamp)
 }
 
-fn write_to_influx(point: InfluxPoint, credentials: InfluxCredentials) {
+fn write_to_influx(point: InfluxPoint, credentials: &InfluxCredentials) {
     let client = reqwest::blocking::Client::new();
-    let response = client.post(credentials.url).body("DATA").send();
+    let body = build_raw_data_from_point(point);
+
+    let response = client.post(credentials.url.to_owned()).body(body).send();
+}
+
+fn run_borg_backup() {
+    let is_borg_installed = Command::new("which").arg("borg").status();
+
+    if is_borg_installed.is_err() || !is_borg_installed.unwrap().success() {
+        panic!("BorgBackup is not installed!");
+    }
+
+    // TODO: add repository and origin path
+    Command::new("borg")
+        .arg("create")
+        .arg("-v")
+        .arg("json")
+        .arg("REPO")
+        .arg("ORIGIN_PATH")
+        .output()
+        .expect("Something went wrong while running the backup!");
 }
