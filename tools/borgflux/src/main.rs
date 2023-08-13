@@ -1,4 +1,5 @@
 use dotenvy::{self, dotenv};
+use reqwest::header::AUTHORIZATION;
 use serde_json::Value;
 use std::env;
 use std::error::Error;
@@ -197,8 +198,19 @@ fn build_raw_data_from_point(point: InfluxPoint) -> String {
         raw_data = format!("{}, {}={}", raw_data, tag.name, tag.value);
     }
 
+    raw_data = format!("{} {}", raw_data, " ");
+
+    let mut counter = 1;
+    let number_of_fields = point.fields.len().to_owned();
+
     for field in point.fields {
         raw_data = format!("{} {}={}", raw_data, field.name, field.value);
+
+        if counter <= number_of_fields {
+            raw_data = format!("{},", raw_data);
+        }
+
+        counter += 1;
     }
 
     let timestamp = SystemTime::now()
@@ -212,8 +224,24 @@ fn build_raw_data_from_point(point: InfluxPoint) -> String {
 fn write_to_influx(point: InfluxPoint, credentials: &InfluxCredentials) {
     let client = reqwest::blocking::Client::new();
     let body = build_raw_data_from_point(point);
+    let api_url = format!(
+        "{}/api/v2/write?bucket={}/rp&precision=s",
+        credentials.url.to_owned(),
+        credentials.bucket.to_owned()
+    );
 
-    let response = client.post(credentials.url.to_owned()).body(body).send();
+    let result = client
+        .post(api_url)
+        .body(body)
+        .header(
+            AUTHORIZATION,
+            "Token ".to_owned() + &credentials.token.to_owned(),
+        )
+        .send();
+
+    if result.is_err() {
+        panic!("Unable to send data to InfluxDB!");
+    }
 }
 
 fn run_borg_backup() {
