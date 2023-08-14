@@ -4,9 +4,6 @@ use serde_json::Value;
 use std::env;
 use std::error::Error;
 use std::fmt;
-use std::fs::File;
-use std::io::BufReader;
-use std::path::Path;
 use std::process::Command;
 use std::time::SystemTime;
 
@@ -117,7 +114,9 @@ fn extract_data_from_json(json_data: Value, host: String) -> Backup {
         compressed_size: json_data["archive"]["stats"]["compressed_size"]
             .as_i64()
             .unwrap(),
-        deduplicated_size: json_data["archive"]["stats"]["deduplicated_size"].as_i64().unwrap(),
+        deduplicated_size: json_data["archive"]["stats"]["deduplicated_size"]
+            .as_i64()
+            .unwrap(),
         number_of_files: json_data["archive"]["stats"]["nfiles"].as_i64().unwrap(),
         original_size: json_data["archive"]["stats"]["original_size"]
             .as_i64()
@@ -175,12 +174,25 @@ fn create_influx_point_from_backup(backup: Backup) -> InfluxPoint {
 }
 
 fn send_frame_point(credentials: &BorgFluxEnv, measurement: String) {
-    let tags: Vec<InfluxTag> = vec![InfluxTag {
-        name: "host".to_string(),
-        value: credentials.host.to_owned(),
-    }];
+    let tags: Vec<InfluxTag> = vec![
+        InfluxTag {
+            name: "host".to_string(),
+            value: credentials.host.to_owned(),
+        },
+        InfluxTag {
+            name: "repository".to_string(),
+            value: credentials.repository.to_owned(),
+        },
+        InfluxTag {
+            name: "source_path".to_string(),
+            value: credentials.source_path.to_owned(),
+        },
+    ];
 
-    let fields: Vec<InfluxField> = vec![];
+    let fields: Vec<InfluxField> = vec![InfluxField {
+        name: "dummy".to_string(),
+        value: InfluxFieldValue::Int(0),
+    }];
 
     let point = InfluxPoint {
         measurement,
@@ -195,18 +207,20 @@ fn build_raw_data_from_point(point: InfluxPoint) -> String {
     let mut raw_data = point.measurement;
 
     for tag in point.tags {
-        raw_data = format!("{}, {}={}", raw_data, tag.name, tag.value);
+        raw_data = format!("{},{}={}", raw_data, tag.name, tag.value);
     }
 
-    raw_data = format!("{} {}", raw_data, " ");
+    if point.fields.len() != 0 {
+        raw_data = format!("{} ", raw_data);
+    }
 
     let mut counter = 1;
     let number_of_fields = point.fields.len().to_owned();
 
     for field in point.fields {
-        raw_data = format!("{} {}={}", raw_data, field.name, field.value);
+        raw_data = format!("{}{}={}", raw_data, field.name, field.value);
 
-        if counter <= number_of_fields {
+        if counter < number_of_fields {
             raw_data = format!("{},", raw_data);
         }
 
