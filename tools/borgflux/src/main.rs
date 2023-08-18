@@ -33,6 +33,12 @@ enum InfluxFieldValue {
     String(String),
 }
 
+struct InfluxPoint {
+    measurement: String,
+    tags: Vec<InfluxTag>,
+    fields: Vec<InfluxField>,
+}
+
 impl fmt::Display for InfluxFieldValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -55,12 +61,6 @@ struct Backup {
     original_size: i64,
 }
 
-struct InfluxPoint {
-    measurement: String,
-    tags: Vec<InfluxTag>,
-    fields: Vec<InfluxField>,
-}
-
 fn main() {
     let credentials = read_env_file();
 
@@ -68,18 +68,22 @@ fn main() {
 
     let json_output = run_borg_backup(&credentials.repository, &credentials.source_path);
 
-    let json_value = read_borg_json_output(json_output);
+    if json_output.is_err() {
+        send_error_point(&credentials, &json_output.to_owned().unwrap_err());
+        return;
+    }
+
+    let json_value = read_borg_json_output(json_output.to_owned().unwrap());
 
     if json_value.is_err() {
-        panic!("Couldn't read the JSON file correctly!");
+        send_error_point(&credentials, "Couldn't read the JSON file correctly!");
+        return;
     }
 
     let backup_stats = extract_data_from_json(json_value.unwrap(), credentials.host.to_owned());
     let influx_backup_point = create_influx_point_from_backup(backup_stats);
 
     write_to_influx(influx_backup_point, &credentials);
-
-    // TODO: write backup Influx point
 
     send_frame_point(&credentials, "backup_end".to_string());
 }
@@ -203,6 +207,36 @@ fn send_frame_point(credentials: &BorgFluxEnv, measurement: String) {
     write_to_influx(point, credentials);
 }
 
+fn send_error_point(credentials: &BorgFluxEnv, error_text: &str) {
+    let tags: Vec<InfluxTag> = vec![
+        InfluxTag {
+            name: "host".to_string(),
+            value: credentials.host.to_owned(),
+        },
+        InfluxTag {
+            name: "repository".to_string(),
+            value: credentials.repository.to_owned(),
+        },
+        InfluxTag {
+            name: "source_path".to_string(),
+            value: credentials.source_path.to_owned(),
+        },
+    ];
+
+    let fields: Vec<InfluxField> = vec![InfluxField {
+        name: "error".to_string(),
+        value: InfluxFieldValue::String(error_text.to_string()),
+    }];
+
+    let point = InfluxPoint {
+        measurement: "backup_error".to_string(),
+        tags,
+        fields,
+    };
+
+    write_to_influx(point, credentials);
+}
+
 fn build_raw_data_from_point(point: InfluxPoint) -> String {
     let mut raw_data = point.measurement;
 
@@ -255,15 +289,15 @@ fn write_to_influx(point: InfluxPoint, credentials: &BorgFluxEnv) {
         .send();
 
     if result.is_err() {
-        panic!("Unable to send data to InfluxDB!");
+        send_error_point(&credentials, "Unable to send data to InfluxDB!");
     }
 }
 
-fn run_borg_backup(repository: &String, source_path: &String) -> String {
+fn run_borg_backup(repository: &String, source_path: &String) -> Result<String, String> {
     let is_borg_installed = Command::new("which").arg("borg").status();
 
     if is_borg_installed.is_err() || !is_borg_installed.unwrap().success() {
-        panic!("BorgBackup is not installed!");
+        return Err("BorgBackup is not installed!".to_string());
     }
 
     let timestamp = SystemTime::now()
@@ -280,8 +314,10 @@ fn run_borg_backup(repository: &String, source_path: &String) -> String {
         .arg("--json")
         .arg(backup_repo)
         .arg(source_path)
-        .output()
-        .expect("Something went wrong while running the backup!");
+        .output();
 
-    String::from_utf8_lossy(&output.stdout).to_string()
+    match output {
+        Ok(message) => Ok(String::from_utf8_lossy(&message.stdout).to_string()),
+        Err(_error) => Err("Unable to run BorgBackup. Something went wrong!".to_string()),
+    }
 }
