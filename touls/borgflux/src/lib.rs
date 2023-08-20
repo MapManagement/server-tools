@@ -61,7 +61,7 @@ struct Backup {
     original_size: i64,
 }
 
-fn main() {
+pub fn run_borgflux() {
     let credentials = read_env_file();
 
     send_frame_point(&credentials, "backup_start".to_string());

@@ -1,0 +1,12 @@
+[package]
+name = "touls"
+version = "0.1.0"
+edition = "2021"
+
+[workspaces]
+members = [".", "borgflux"]
+
+
+[dependencies]
+clap = { version = "4.3.23", features = ["derive", "cargo"] }
+borgflux = { path = "borgflux" }
