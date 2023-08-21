@@ -62,7 +62,14 @@ struct Backup {
 }
 
 pub fn run_borgflux() {
-    let credentials = read_env_file();
+    let env_output = read_env_file();
+
+    if env_output.is_err() {
+        eprintln!("Error: {}", env_output.err().unwrap());
+        return;
+    }
+
+    let credentials = env_output.unwrap();
 
     send_frame_point(&credentials, "backup_start".to_string());
 
@@ -88,10 +95,10 @@ pub fn run_borgflux() {
     send_frame_point(&credentials, "backup_end".to_string());
 }
 
-fn read_env_file() -> BorgFluxEnv {
+fn read_env_file() -> Result<BorgFluxEnv, String> {
     dotenv().ok();
 
-    BorgFluxEnv {
+    Ok(BorgFluxEnv {
         url: env::var("INFLUX_URL").expect("INFLUX_URL missing"),
         token: env::var("INFLUX_TOKEN").expect("INFLUX_TOKEN missing"),
         org: env::var("INFLUX_ORG").expect("INFLUX_ORG missing"),
@@ -99,7 +106,7 @@ fn read_env_file() -> BorgFluxEnv {
         host: env::var("HOST").expect("HOST missing"),
         repository: env::var("BORG_REPOSITORY").expect("BORG_REPOSITORY missing"),
         source_path: env::var("BORG_SOURCE_PATH").expect("BORG_SOURCE_PATH missing"),
-    }
+    })
 }
 
 fn read_borg_json_output(json_output: String) -> Result<Value, Box<dyn Error>> {
@@ -234,6 +241,7 @@ fn send_error_point(credentials: &BorgFluxEnv, error_text: &str) {
         fields,
     };
 
+    eprintln!("Error: {}", error_text);
     write_to_influx(point, credentials);
 }
 
