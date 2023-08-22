@@ -15,9 +15,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Build
-      run: cargo build -c src/ --verbose
-    - name: Run tests
-      run: cargo test -c src/ --verbose
+      - uses: actions/checkout@v3
 
+      - name: Build
+        working-directory: ./touls
+        run: cargo build --verbose
+
+      - name: Run tests
+        working-directory: ./touls
+        run: cargo test --verbose
