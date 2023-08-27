@@ -47,3 +47,11 @@ BorgBackup + InfluxDB
     - source_path
 - Fields
     - error
+
+## Wakey
+
+Send magic packets to start WOL enabled machines:
+
+```sh
+touls wake_on_lan aa:bb:cc:dd:ee:ff
+```

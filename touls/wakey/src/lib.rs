@@ -64,9 +64,7 @@ fn build_magic_packet(address_array: [u8; 6]) -> Result<[u8; 102], String> {
 }
 
 fn send_packet(magic_packet: [u8; 102]) {
-    println!("{:?}", magic_packet);
-    let socket =
-        UdpSocket::bind("0.0.0.0:0").expect("Couldn't bind to address!");
+    let socket = UdpSocket::bind("0.0.0.0:0").expect("Couldn't bind to address!");
     socket
         .set_broadcast(true)
         .expect("Cannot send to broadcast!");
