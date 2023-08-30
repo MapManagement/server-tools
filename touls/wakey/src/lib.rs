@@ -1,5 +1,5 @@
 use std::io::{Error, ErrorKind};
-use std::net::{Ipv4Addr, UdpSocket};
+use std::net::UdpSocket;
 use std::num::ParseIntError;
 
 pub fn wake_on_lan(mac_address: &str) -> Result<(), Error> {
@@ -24,9 +24,18 @@ pub fn wake_on_lan(mac_address: &str) -> Result<(), Error> {
 
 fn mac_to_array(mac_address: &str) -> Result<[u8; 6], String> {
     let address_bytes: Vec<&str> = mac_address.split(":").collect();
+
+    if address_bytes.len() != 6 {
+        return Err("The given MAC address is not valid".to_string());
+    };
+
     let mut address_array: [u8; 6] = [0; 6];
 
     for i in 0..address_array.len() {
+        if address_bytes[i].len() != 2 {
+            return Err("The given MAC address is not valid".to_string());
+        };
+
         let parsed = decode_hex(address_bytes[i]);
 
         match parsed {
@@ -70,3 +79,7 @@ fn send_packet(magic_packet: [u8; 102]) {
         .expect("Cannot send to broadcast!");
     let _repsonse = socket.send_to(&magic_packet, "255.255.255.255:9");
 }
+
+#[cfg(test)]
+#[path = "./tests.rs"]
+mod tests;
