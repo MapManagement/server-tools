@@ -1,5 +1,6 @@
-use dotenvy::{self, dotenv};
+use config::{Config, ConfigError};
 use reqwest::header::AUTHORIZATION;
+use serde::Deserialize;
 use serde_json::Value;
 use std::env;
 use std::error::Error;
@@ -7,7 +8,8 @@ use std::fmt;
 use std::process::Command;
 use std::time::SystemTime;
 
-struct BorgFluxEnv {
+#[derive(Debug, Deserialize)]
+struct BorgFluxConfig {
     url: String,
     token: String,
     org: String,
@@ -15,6 +17,16 @@ struct BorgFluxEnv {
     host: String,
     repository: String,
     source_path: String,
+}
+
+impl BorgFluxConfig {
+    pub fn new(file_path: &str) -> Result<Self, ConfigError> {
+        let config = Config::builder()
+            .add_source(config::File::with_name(file_path))
+            .build()?;
+
+        config.try_deserialize()
+    }
 }
 
 struct InfluxTag {
@@ -61,8 +73,8 @@ struct Backup {
     original_size: i64,
 }
 
-pub fn run_borgflux() {
-    let env_output = read_env_file();
+pub fn run_borgflux(file_path: &str) {
+    let env_output = read_config_file(file_path);
 
     if env_output.is_err() {
         eprintln!("Error: {}", env_output.err().unwrap());
@@ -95,18 +107,13 @@ pub fn run_borgflux() {
     send_frame_point(&credentials, "backup_end".to_string());
 }
 
-fn read_env_file() -> Result<BorgFluxEnv, String> {
-    dotenv().ok();
+fn read_config_file(file_path: &str) -> Result<BorgFluxConfig, String> {
+    let result = BorgFluxConfig::new(file_path);
 
-    Ok(BorgFluxEnv {
-        url: env::var("INFLUX_URL").expect("INFLUX_URL missing"),
-        token: env::var("INFLUX_TOKEN").expect("INFLUX_TOKEN missing"),
-        org: env::var("INFLUX_ORG").expect("INFLUX_ORG missing"),
-        bucket: env::var("INFLUX_BUCKET").expect("INFLUX_BUCKET missing"),
-        host: env::var("HOST").expect("HOST missing"),
-        repository: env::var("BORG_REPOSITORY").expect("BORG_REPOSITORY missing"),
-        source_path: env::var("BORG_SOURCE_PATH").expect("BORG_SOURCE_PATH missing"),
-    })
+    match result {
+        Ok(config) => Ok(config),
+        Err(_) => Err("Couldn't read the configuration file!".to_string()),
+    }
 }
 
 fn read_borg_json_output(json_output: String) -> Result<Value, Box<dyn Error>> {
@@ -184,7 +191,7 @@ fn create_influx_point_from_backup(backup: Backup) -> InfluxPoint {
     }
 }
 
-fn send_frame_point(credentials: &BorgFluxEnv, measurement: String) {
+fn send_frame_point(credentials: &BorgFluxConfig, measurement: String) {
     let tags: Vec<InfluxTag> = vec![
         InfluxTag {
             name: "host".to_string(),
@@ -214,7 +221,7 @@ fn send_frame_point(credentials: &BorgFluxEnv, measurement: String) {
     write_to_influx(point, credentials);
 }
 
-fn send_error_point(credentials: &BorgFluxEnv, error_text: &str) {
+fn send_error_point(credentials: &BorgFluxConfig, error_text: &str) {
     let tags: Vec<InfluxTag> = vec![
         InfluxTag {
             name: "host".to_string(),
@@ -277,7 +284,7 @@ fn build_raw_data_from_point(point: InfluxPoint) -> String {
     format!("{} {}", raw_data, timestamp)
 }
 
-fn write_to_influx(point: InfluxPoint, credentials: &BorgFluxEnv) {
+fn write_to_influx(point: InfluxPoint, credentials: &BorgFluxConfig) {
     let client = reqwest::blocking::Client::new();
     let body = build_raw_data_from_point(point);
     let api_url = format!(
