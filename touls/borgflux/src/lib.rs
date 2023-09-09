@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::error::Error;
 use std::fmt;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::SystemTime;
 
 #[derive(Debug, Deserialize)]
@@ -308,7 +308,10 @@ fn write_to_influx(point: InfluxPoint, credentials: &BorgFluxConfig) {
 }
 
 fn run_borg_backup(repository: &String, source_path: &String) -> Result<String, String> {
-    let is_borg_installed = Command::new("which").arg("borg").status();
+    let is_borg_installed = Command::new("which")
+        .stdout(Stdio::null())
+        .arg("borg")
+        .status();
 
     if is_borg_installed.is_err() || !is_borg_installed.unwrap().success() {
         return Err("BorgBackup is not installed!".to_string());
