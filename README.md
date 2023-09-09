@@ -6,13 +6,20 @@ BorgBackup + InfluxDB
 
 ### Variables
 
-- ``INFLUX_URL`` - URL to InfluxDB
-- ``INFLUX_TOKEN`` - API token for InfluxDB
-- ``INFLUX_ORG`` - Organization to use for InfluxDB
-- ``INFLUX_BUCKET`` - InfluxDB bucket to send data to
-- ``HOST`` - custom host name (used for points within InfluxDB)
-- ``BORG_REPOSITORY`` - Borg repository for backup data
-- ``BORG_SOURCE_PATH`` - local repository to create a backup of
+You need to add a configuration file in order to connect to an InfluxDB instance and to backup
+a specific path:
+
+```sh
+touls borgflux -c config_file.toml
+```
+
+- ``influx_url`` - URL to InfluxDB
+- ``influx_token`` - API token for InfluxDB
+- ``influx_org`` - Organization to use for InfluxDB
+- ``influx_bucket`` - InfluxDB bucket to send data to
+- ``hostname`` - custom host name (used for points within InfluxDB)
+- ``borg_repository`` - Borg repository for backup data
+- ``borg_source_path`` - local repository to create a backup of
 
 ### Measurements
 

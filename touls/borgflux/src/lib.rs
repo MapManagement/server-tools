@@ -2,7 +2,6 @@ use config::{Config, ConfigError};
 use reqwest::header::AUTHORIZATION;
 use serde::Deserialize;
 use serde_json::Value;
-use std::env;
 use std::error::Error;
 use std::fmt;
 use std::process::Command;
@@ -10,13 +9,13 @@ use std::time::SystemTime;
 
 #[derive(Debug, Deserialize)]
 struct BorgFluxConfig {
-    url: String,
-    token: String,
-    org: String,
-    bucket: String,
-    host: String,
-    repository: String,
-    source_path: String,
+    influx_url: String,
+    influx_token: String,
+    influx_org: String,
+    influx_bucket: String,
+    hostname: String,
+    borg_repository: String,
+    borg_source_path: String,
 }
 
 impl BorgFluxConfig {
@@ -85,7 +84,7 @@ pub fn run_borgflux(file_path: &str) {
 
     send_frame_point(&credentials, "backup_start".to_string());
 
-    let json_output = run_borg_backup(&credentials.repository, &credentials.source_path);
+    let json_output = run_borg_backup(&credentials.borg_repository, &credentials.borg_source_path);
 
     if json_output.is_err() {
         send_error_point(&credentials, &json_output.to_owned().unwrap_err());
@@ -99,7 +98,7 @@ pub fn run_borgflux(file_path: &str) {
         return;
     }
 
-    let backup_stats = extract_data_from_json(json_value.unwrap(), credentials.host.to_owned());
+    let backup_stats = extract_data_from_json(json_value.unwrap(), credentials.hostname.to_owned());
     let influx_backup_point = create_influx_point_from_backup(backup_stats);
 
     write_to_influx(influx_backup_point, &credentials);
@@ -195,15 +194,15 @@ fn send_frame_point(credentials: &BorgFluxConfig, measurement: String) {
     let tags: Vec<InfluxTag> = vec![
         InfluxTag {
             name: "host".to_string(),
-            value: credentials.host.to_owned(),
+            value: credentials.hostname.to_owned(),
         },
         InfluxTag {
             name: "repository".to_string(),
-            value: credentials.repository.to_owned(),
+            value: credentials.borg_repository.to_owned(),
         },
         InfluxTag {
             name: "source_path".to_string(),
-            value: credentials.source_path.to_owned(),
+            value: credentials.borg_source_path.to_owned(),
         },
     ];
 
@@ -225,15 +224,15 @@ fn send_error_point(credentials: &BorgFluxConfig, error_text: &str) {
     let tags: Vec<InfluxTag> = vec![
         InfluxTag {
             name: "host".to_string(),
-            value: credentials.host.to_owned(),
+            value: credentials.hostname.to_owned(),
         },
         InfluxTag {
             name: "repository".to_string(),
-            value: credentials.repository.to_owned(),
+            value: credentials.borg_repository.to_owned(),
         },
         InfluxTag {
             name: "source_path".to_string(),
-            value: credentials.source_path.to_owned(),
+            value: credentials.borg_source_path.to_owned(),
         },
     ];
 
@@ -289,9 +288,9 @@ fn write_to_influx(point: InfluxPoint, credentials: &BorgFluxConfig) {
     let body = build_raw_data_from_point(point);
     let api_url = format!(
         "{}/api/v2/write?bucket={}&org={}&precision=s",
-        credentials.url.to_owned(),
-        credentials.bucket.to_owned(),
-        credentials.org.to_owned()
+        credentials.influx_url.to_owned(),
+        credentials.influx_bucket.to_owned(),
+        credentials.influx_org.to_owned()
     );
 
     let result = client
@@ -299,7 +298,7 @@ fn write_to_influx(point: InfluxPoint, credentials: &BorgFluxConfig) {
         .body(body)
         .header(
             AUTHORIZATION,
-            "Token ".to_owned() + &credentials.token.to_owned(),
+            "Token ".to_owned() + &credentials.influx_token.to_owned(),
         )
         .send();
 
