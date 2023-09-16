@@ -74,6 +74,7 @@ struct Backup {
 
 pub fn run_borgflux(file_path: &str) {
     let env_output = read_config_file(file_path);
+    println!("Read config file");
 
     if env_output.is_err() {
         eprintln!("Error: {}", env_output.err().unwrap());
@@ -84,7 +85,10 @@ pub fn run_borgflux(file_path: &str) {
 
     send_frame_point(&credentials, "backup_start".to_string());
 
+    println!("Sent start point");
+
     let json_output = run_borg_backup(&credentials.borg_repository, &credentials.borg_source_path);
+    println!("Ran backup");
 
     if json_output.is_err() {
         send_error_point(&credentials, &json_output.to_owned().unwrap_err());
@@ -92,6 +96,7 @@ pub fn run_borgflux(file_path: &str) {
     }
 
     let json_value = read_borg_json_output(json_output.to_owned().unwrap());
+    println!("Read JSON output");
 
     if json_value.is_err() {
         send_error_point(&credentials, "Couldn't read the JSON file correctly!");
@@ -99,11 +104,15 @@ pub fn run_borgflux(file_path: &str) {
     }
 
     let backup_stats = extract_data_from_json(json_value.unwrap(), credentials.hostname.to_owned());
+    println!("Extracted backup stats");
     let influx_backup_point = create_influx_point_from_backup(backup_stats);
+    println!("Created influx backup point");
 
     write_to_influx(influx_backup_point, &credentials);
+    println!("Wrote to influx");
 
     send_frame_point(&credentials, "backup_end".to_string());
+    println!("Sent stop point");
 }
 
 fn read_config_file(file_path: &str) -> Result<BorgFluxConfig, String> {
