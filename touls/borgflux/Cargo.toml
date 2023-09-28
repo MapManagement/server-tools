@@ -1,6 +1,13 @@
 [package]
 name = "borgflux"
 version = "0.1.0"
+authors = ["Jan <MapManagement@protonmail.com>"]
+description = "Some helpful server tools packed into one CLI software."
+readme = "../../README.md"
+homepage = "https://github.com/MapManagement/touls"
+repository = "https://github.com/MapManagement/touls"
+keywords = ["cli", "tools", "server-helper"]
+categories = ["command-line-utilities"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
