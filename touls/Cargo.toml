@@ -16,5 +16,5 @@ members = [".", "borgflux", "wakey"]
 
 [dependencies]
 clap = { version = "4.3.23", features = ["derive", "cargo"] }
-borgflux = { path = "borgflux" }
-wakey = { path = "wakey" }
+borgflux = { path = "borgflux", version = "0.1.0"}
+wakey = { path = "wakey", version = "0.1.0" }
