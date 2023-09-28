@@ -1,6 +1,13 @@
 [package]
 name = "wakey"
 version = "0.1.0"
+authors = ["Jan <MapManagement@protonmail.com>"]
+description = "Wake On LAN tool."
+readme = "../../README.md"
+homepage = "https://github.com/MapManagement/touls"
+repository = "https://github.com/MapManagement/touls"
+keywords = ["cli", "tools", "server-helper"]
+categories = ["command-line-utilities"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
