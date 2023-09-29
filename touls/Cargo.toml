@@ -12,10 +12,10 @@ categories = ["command-line-utilities"]
 edition = "2021"
 
 [workspaces]
-members = [".", "borgflux", "wakey"]
+members = [".", "borgflux", "wakey-wakey"]
 
 
 [dependencies]
 clap = { version = "4.3.23", features = ["derive", "cargo"] }
 borgflux = { path = "borgflux", version = "0.1.0"}
-wakey = { path = "wakey", version = "0.1.0" }
+wakey-wakey = { path = "wakey-wakey", version = "0.1.0" }

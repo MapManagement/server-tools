@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use borgflux::run_borgflux;
 use clap::{arg, command, Arg, ArgMatches, Command, Parser};
-use wakey::wake_on_lan;
+use wakey_wakey::wake_on_lan;
 
 #[derive(Parser)]
 struct ToulsCli {
